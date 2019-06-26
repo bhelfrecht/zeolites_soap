@@ -49,6 +49,8 @@ parser.add_argument('-shuffle', action='store_true',
         help='Do an extra shuffle in the learning curves, so '\
                 'training sets at increasing numbers of training points '\
                 'are independent')
+parser.add_argument('-output', type=str, default='.',
+        help='Directory where the output files should be placed')
 
 args = parser.parse_args()
 
@@ -58,7 +60,7 @@ if args.kernel == 'linear':
 
 ### PROPERTY EXTRACTION ###
 # Extract structure properties
-sys.stderr.write('Extracting properties...\n')
+sys.stdout.write('Extracting properties...\n')
 al = qp.AtomsReader(args.structure)
 structIdxs, nAtoms, volume, p \
         = SOAPTools.extract_structure_properties(al, args.Z, propName=args.p)
@@ -75,7 +77,16 @@ if args.p == 'Energy_per_Si':
     # Convert back to energy per Si
     p /= nAtoms/3
 elif args.p == 'volume':
-    p /= nAtoms
+     #p /= nAtoms <-- originally calculated MAE with this,
+     #                but the wrong normalization in the kernel
+     #                (per atom instead of per Si)
+     #                cancels the error so the MAE are per Si
+     p /= nAtoms/3 # Gives volume per Si the "correct" way
+                   # Gives results consistent with the "incorrect"
+                   # way if the the regularization sigma
+                   # is multiplied by 9 (the jitter is scaled
+                   # "automatically" as it depends on the eigenvalues
+                   # of kernels)
 
 # Get k-fold indices
 trainIdxs = np.loadtxt(args.train, dtype=np.int)
@@ -113,13 +124,13 @@ envKernel = None
 
 ### PROPERTY REGRESSION ###
 # Perform property decomposition
-sys.stderr.write('Performing property regression...\n')
+sys.stdout.write('Performing property regression...\n')
 for idx, i in enumerate(args.pcalearn):
     if i is not None:
-        sys.stderr.write('-----> PCA: %d\n' % i)
+        sys.stdout.write('-----> PCA: %d\n' % i)
     for wdx, w in enumerate(args.width):
         if w is not None:
-            sys.stderr.write('----> Width: %.2e\n' % w)
+            sys.stdout.write('----> Width: %.2e\n' % w)
         if args.kernel == 'gaussian':
             dMM = cdist(repSOAPs[:, 0:i], repSOAPs[:, 0:i], metric='euclidean')
             kMM = SOAPTools.gaussianKernel(dMM, w)
@@ -150,15 +161,27 @@ for idx, i in enumerate(args.pcalearn):
         if args.p == 'Energy_per_Si':
             kNM = (kNM.T*3/nAtoms).T
         else:
-            kNM = (kNM.T/nAtoms).T
+            #kNM = (kNM.T/nAtoms).T <-- originally calculated MAE with this,
+            #                           but the wrong normalization 
+            #                           in the kernel
+            #                           (per atom instead of per Si)
+            #                           cancels the error so the MAE are per Si
+            kNM = (kNM.T*3/nAtoms).T # Gives volume per Si the "correct" way
+                                     # Gives results consistent with 
+                                     # the "incorrect" way if the 
+                                     # regularization sigma is multiplied by 9 
+                                     # (the jitter is scaled "automatically" 
+                                     # as it depends on the eigenvalues
+                   # of kernels)
         for sdx, s in enumerate(args.sigma):
-            sys.stderr.write('---> Sigma: %.2e\n' % s)
+            sys.stdout.write('---> Sigma: %.2e\n' % s)
             for jdx, j in enumerate(args.j):
-                sys.stderr.write('--> Jitter: %.2e\n' % j)
+                sys.stdout.write('--> Jitter: %.2e\n' % j)
                 for ndx, n in enumerate(args.ntrain):
-                    sys.stderr.write('-> No. Training Points: %d\n' % n)
+                    sys.stdout.write('-> No. Training Points: %d\n' % n)
                     for k in range(0, args.k):
-                        sys.stderr.write('> Iteration: %d\r' % (k+1))
+                        sys.stdout.write('> Iteration: %d\r' % (k+1))
+                        sys.stdout.flush()
                         if args.shuffle:
                             np.random.shuffle(trainIdxs[k])
                         idxsTrain = trainIdxs[k, 0:n]
@@ -167,7 +190,8 @@ for idx, i in enumerate(args.pcalearn):
                                 = SOAPTools.property_regression(p, kMM, kNM, 
                                         len(structIdxs), idxsTrain, 
                                         idxsValidate, sigma=s, 
-                                        envKernel=envKernel, jitter=j)
+                                        envKernel=envKernel, jitter=j,
+                                        output=args.output)
                         #np.savetxt('yTrain-PCA%d-%d-%d.dat' % (i, n, k),
                         #        np.column_stack((yTrain, yyTrain)))
                         #np.savetxt('yTest-PCA%d-%d-%d.dat' % (i, n, k),
@@ -207,14 +231,14 @@ for idx, i in enumerate(args.pcalearn):
                             rmseAvgTrain, rmseAvgTest]:
                         for ydx, y in enumerate([i, w, s, j, n]):
                             x[idx, wdx, sdx, jdx, ndx, ydx] = y
-                    sys.stderr.write('\n')
+                    sys.stdout.write('\n')
 
-np.save('maeAvgTrain.npy', maeAvgTrain)
-np.save('maeAvgTest.npy', maeAvgTest)
-np.save('rmseAvgTrain.npy', rmseAvgTrain)
-np.save('rmseAvgTest.npy', rmseAvgTest)
+np.save('%s/maeAvgTrain.npy' % args.output, maeAvgTrain)
+np.save('%s/maeAvgTest.npy' % args.output, maeAvgTest)
+np.save('%s/rmseAvgTrain.npy' % args.output, rmseAvgTrain)
+np.save('%s/rmseAvgTest.npy' % args.output, rmseAvgTest)
 
-np.save('maeTrain.npy', maeTrain)
-np.save('maeTest.npy', maeTest)
-np.save('rmseTrain.npy', rmseTrain)
-np.save('rmseTest.npy', rmseTest)
+np.save('%s/maeTrain.npy' % args.output, maeTrain)
+np.save('%s/maeTest.npy' % args.output, maeTest)
+np.save('%s/rmseTrain.npy' % args.output, rmseTrain)
+np.save('%s/rmseTest.npy' % args.output, rmseTest)

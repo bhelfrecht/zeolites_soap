@@ -36,12 +36,14 @@ parser.add_argument('-env', action='store_true',
         help='Compute property decomposition into environment contributions')
 parser.add_argument('-lowmem', action='store_true',
         help='Compute kernel for environment decomposition in batches')
+parser.add_argument('-output', type=str, default='.',
+        help='Directory where the output files should be saved')
 
 args = parser.parse_args()
 
 ### PROPERTY EXTRACTION ###
 # Extract structure properties
-sys.stderr.write('Extracting properties...\n')
+sys.stdout.write('Extracting properties...\n')
 al = qp.AtomsReader(args.structure)
 structIdxs, nAtoms, volume, p \
         = SOAPTools.extract_structure_properties(al, args.Z, propName=args.p)
@@ -58,7 +60,17 @@ if args.p == 'Energy_per_Si':
     # Convert back to energy per Si
     p /= nAtoms/3
 elif args.p == 'volume':
-    p /= nAtoms
+    #p /= nAtoms <-- originally decomposed environments with this,
+    #                but the wrong scaling in the kernel
+    #                (per atom instead of per Si)
+    #                cancels the error so the 
+    #                decomposed volumes are per Si
+    p /= nAtoms/3 # Gives volume per Si the "correct" way
+                  # Gives results consistent with the "incorrect"
+                  # way if the the regularization sigma
+                  # is multiplied by 9 (the jitter is scaled
+                  # "automatically" as it depends on the eigenvalues
+                  # of kernels)
 
 # Shuffle training indices for each iteration
 randomIdxs = np.arange(0, len(structIdxs))
@@ -77,7 +89,7 @@ envKernel = None
 
 ### PROPERTY REGRESSION ###
 # Perform property decomposition
-sys.stderr.write('Performing property regression...\n')
+sys.stdout.write('Performing property regression...\n')
 if args.kernel == 'gaussian':
     dMM = cdist(repSOAPs[:, 0:args.npca], 
             repSOAPs[:, 0:args.npca], metric='euclidean')
@@ -89,7 +101,7 @@ if args.kernel == 'gaussian':
         envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                 repSOAPs[:, 0:args.npca], 
                 kernel='gaussian', width=args.width, 
-                nc=args.npca, lowmem=args.lowmem)
+                nc=args.npca, lowmem=args.lowmem, output=args.output)
 elif args.kernel == 'laplacian':
     dMM = cdist(repSOAPs[:, 0:args.npca], 
             repSOAPs[:, 0:args.npca], metric='cityblock')
@@ -101,7 +113,7 @@ elif args.kernel == 'laplacian':
         envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                 repSOAPs[:, 0:args.npca],
                 kernel='laplacian', width=args.width, 
-                nc=args.npca, lowmem=args.lowmem)
+                nc=args.npca, lowmem=args.lowmem, output=args.output)
 else: # standard soaps
     kMM = SOAPTools.build_kernel(repSOAPs[:, 0:args.npca], 
             repSOAPs[:, 0:args.npca], zeta=args.zeta)
@@ -111,12 +123,23 @@ else: # standard soaps
     if args.env is True:
         envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                 repSOAPs[:, 0:args.npca],
-                zeta=args.zeta, nc=args.npca, lowmem=args.lowmem)
+                zeta=args.zeta, nc=args.npca, 
+                lowmem=args.lowmem, output=args.output)
 
 if args.p == 'Energy_per_Si':
     kNM = (kNM.T*3/nAtoms).T
 else:
-    kNM = (kNM.T/nAtoms).T
+    #kNM = (kNM.T/nAtoms).T <-- originally decomposed environments with this,
+    #                           but the wrong normalization in the kernel
+    #                           (per atom instead of per Si)
+    #                           cancels the error so the decomposed 
+    #                           volumes are per Si
+    kNM = (kNM.T*3/nAtoms).T # Gives volume per Si the "correct" way
+                             # Gives results consistent with the "incorrect"
+                             # way if the the regularization sigma
+                             # is multiplied by 9 (the jitter is scaled
+                             # "automatically" as it depends on the eigenvalues
+                             # of kernels)
 
 header = 'Kernel = %s, Width = %1.3E, Zeta = %1.3E, '\
         'Sigma = %1.3E, nPCA = %s, nTrain = %d, '\
@@ -125,7 +148,10 @@ header = 'Kernel = %s, Width = %1.3E, Zeta = %1.3E, '\
 yTrain, yTest, yyTrain, yyTest \
         = SOAPTools.property_regression(p, kMM, kNM, 
                 len(structIdxs), trainIdxs, testIdxs, 
-                sigma=args.sigma, jitter=args.j, envKernel=envKernel)
+                sigma=args.sigma, jitter=args.j, 
+                envKernel=envKernel, output=args.output)
 
-np.savetxt('yTrain.dat', np.column_stack((yTrain, yyTrain)), header=header)
-np.savetxt('yTest.dat', np.column_stack((yTest, yyTest)), header=header)
+np.savetxt('%s/yTrain.dat' % args.output, 
+        np.column_stack((yTrain, yyTrain)), header=header)
+np.savetxt('%s/yTest.dat' % args.output, 
+        np.column_stack((yTest, yyTest)), header=header)
