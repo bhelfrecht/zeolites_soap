@@ -28,6 +28,6 @@ for i, at in enumerate(al):
         np.savetxt(g, np.flip(P, axis=1))
     else:
         np.savetxt(g, P[:, 1::2])
-    sys.stderr.write('Frame: %d\r' % (i+1))
-sys.stderr.write('\n')
+    sys.stdout.write('Frame: %d\r' % (i+1))
+sys.stdout.write('\n')
 g.close()

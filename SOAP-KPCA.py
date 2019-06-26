@@ -22,11 +22,10 @@ parser.add_argument('-lowmem', action='store_true',
         help='Low memory version of KPCA')
 parser.add_argument('-idxs', type=str, default='FPS.idxs', 
         help='File with FPS indices for representative environments')
-parser.add_argument('-loadings', action='store_true',
-        help='Calculate KPCA with loadings')
-parser.add_argument('-raw', action='store_true',
-        help='Transform the PCA with real data kernel '\
-                'instead of approximated kernel (not currently implemented')
+parser.add_argument('-dotransform', type=str, default=None,
+        help='Project data based on existing kernel')
+parser.add_argument('-output', type=str, default='.',
+        help='Directory where the output files should be saved')
 
 args = parser.parse_args()
 
@@ -35,7 +34,14 @@ repIdxs = np.loadtxt(args.idxs, dtype=np.int)
 
 inputFiles = SOAPTools.read_input(args.soap)
 
-SOAPTools.sparse_kPCA(inputFiles, repIdxs, kernel=args.kernel,
-        zeta=args.zeta, width=args.width, nPCA=args.pca,
-        loadings=args.loadings, useRaw=args.raw, lowmem=args.lowmem)
-
+if args.dotransform is not None:
+    testFiles = SOAPTools.read_input(args.dotransform)
+    SOAPTools.sparse_kPCA_transform(inputFiles, testFiles, repIdxs,
+            np.load('U.npy'),
+            #np.load('P.npy'), np.load('V.npy'), np.load('Gmean.npy'),
+            kernel=args.kernel, zeta=args.zeta, width=args.width,
+            nPCA=args.pca, lowmem=args.lowmem, output=args.output)
+else:
+    SOAPTools.sparse_kPCA(inputFiles, repIdxs, kernel=args.kernel,
+            zeta=args.zeta, width=args.width, nPCA=args.pca,
+            lowmem=args.lowmem, output=args.output)

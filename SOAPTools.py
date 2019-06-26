@@ -11,152 +11,6 @@ from sklearn.decomposition import IncrementalPCA
 from sklearn.preprocessing import scale
 from sklearn import svm
 
-def correlation_factor(PCAFiles, al, Z, nPCA):
-    structIdxs = []
-    for i, at in enumerate(al):
-        n = 0
-        atoms = at.get_atomic_numbers()
-        for j in Z:
-            n += np.count_nonzero(atoms == j)
-        structIdxs.append(n)
-    
-    f = 0
-    s = 0
-    ss = 0
-    CF = []
-    if os.path.splitext(PCAFiles[f])[1] == '.npy':
-        batchPCA = np.load(PCAFiles[f])[:, 0:nPCA]
-    else:
-        batchPCA = np.loadtxt(PCAFiles[f])[:, 0:nPCA]
-
-    for i in range(0, len(structIdxs)):
-        iPCA = batchPCA[s:s+structIdxs[i]]
-        iMean = np.mean(iPCA, axis=0)
-        iPCA -= iMean
-        iKernel = np.dot(iPCA, iPCA.T)
-        #CF.append(np.sum(np.triu(iKernel, k=1))/structIdxs[i])
-        CF.append(np.sum(np.triu(iKernel, k=0))/structIdxs[i])
-        s += structIdxs[i]
-        ss += 1
-        if s >= len(batchPCA) and (f+1) < len(PCAFiles):
-            f += 1
-            if os.path.splitext(PCAFiles[f])[1] == '.npy':
-                batchPCA = np.load(PCAFiles[f])[:, 0:nPCA]
-            else:
-                batchPCA = np.loadtxt(PCAFiles[f])[:, 0:nPCA]
-            s = 0
-        sys.stderr.write('Batch: %d, Structure: %d\r' % (f+1, ss))
-    sys.stderr.write('\n')
-    CF = np.asarray(CF)
-    np.savetxt('CF.dat', CF)
-
-def DEEM_score(DEEMFiles, IZAFiles, al, Z, nc=None, propName=None, m='euclidean'):
-    if propName is not None:
-        p = np.zeros(len(al))
-    else:
-        p = None
-    nAtoms = np.zeros(len(al))
-    volume = np.zeros(len(al))
-    structIdxs = []
-    for i, at in enumerate(al):
-        n = 0
-        atoms = at.get_atomic_numbers()
-        for j in Z:
-            n += np.count_nonzero(atoms == j)
-        structIdxs.append(n)
-        nAtoms[i] = len(atoms)
-        volume[i] = np.linalg.det(at.cell)
-        if propName is not None:
-            p[i] = at.params[propName]
-
-    volumes = np.repeat(volume, structIdxs)
-    if propName is not None:
-        ps = np.repeat(p, structIdxs)
-    
-    f = 0
-    s = 0
-    ss = 0
-    score = []
-    envscore = []
-    mins = []
-    envmin = []
-    if os.path.splitext(DEEMFiles[f])[1] == '.npy':
-        batchDEEM = np.load(DEEMFiles[f])[:, 0:nc]
-    else:
-        batchDEEM = np.loadtxt(DEEMFiles[f])[:, 0:nc]
-    if os.path.splitext(IZAFiles[f])[1] == '.npy':
-        batchIZA = np.load(IZAFiles[f])[:, 0:nc]
-    else:
-        batchIZA = np.loadtxt(IZAFiles[f])[:, 0:nc]
-
-    for i in range(0, len(structIdxs)):
-        iDEEM = batchDEEM[s:s+structIdxs[i]]
-        dDEEM = cdist(iDEEM, batchIZA, metric=m)
-        dMin = np.amin(dDEEM, axis=1)
-        dMaxMin = np.amax(dMin)
-        score.append(dMaxMin)
-        envscore.append([dMaxMin]*structIdxs[i])
-        mins.append(np.amin(dMin))
-        envmin.append(dMin)
-        s += structIdxs[i]
-        ss += 1
-        if s >= len(batchDEEM) and (f+1) < len(DEEMFiles):
-            f += 1
-            if os.path.splitext(DEEMFiles[f])[1] == '.npy':
-                batchDEEM = np.load(DEEMFiles[f])[:, 0:nc]
-            else:
-                batchDEEM = np.loadtxt(DEEMFiles[f])[:, 0:nc]
-            s = 0
-        sys.stderr.write('Batch: %d, Structure: %d\r' % (f+1, ss))
-    sys.stderr.write('\n')
-    score = np.asarray(score)
-    envscore = np.concatenate(envscore)
-    mins = np.asarray(mins)
-    envmin = np.concatenate(envmin)
-    np.savetxt('maxmin.dat', score)
-    np.savetxt('maxmins.dat', envscore)
-    np.savetxt('mins.dat', mins)
-    np.savetxt('envmin.dat', envmin)
-    np.savetxt('volume.dat', volume)
-    np.savetxt('volumes.dat', volumes)
-    if propName is not None:
-        np.savetxt('p.dat', p)
-        np.savetxt('ps.dat', ps)
-
-def vDist(v1, v2, kType):
-    """
-        Compute Euclidian or Manhattan norm
-        between two vectors
-        
-        ---Arguments---
-        v1, v2: vectors
-        kType: norm type
-    """
-    if np.shape(v1) != np.shape(v2):
-        sys.exit("Vectors are not same length")
-    else:
-        if kType == 'gaussian':
-            return np.linalg.norm((v1-v2), ord=2)
-        else:
-            return np.linalg.norm((v1-v2), ord=1)
-
-def matDist(mat1, mat2, kType):
-    """
-        Compute Euclidian or Manhattan norm
-        between two matrices
-        
-        ---Arguments---
-        mat1, mat2: matrices
-        kType: norm type
-    """
-    if np.shape(mat1) != np.shape(mat2):
-        sys.exit("Feature Matrices are not the same shape")
-    else:
-        if kType == 'gaussian':
-            return np.linalg.norm((mat1-mat2).flatten(), ord=2)
-        else:
-            return np.linalg.norm((mat1-mat2).flatten(), ord=1)
-
 def laplacianKernel(dMat, sigma):
     """
         Laplacian kernel
@@ -204,10 +58,11 @@ def RMSE(predicted, observed):
     if np.size(predicted) != np.size(observed):
         sys.exit("Predicted and observed vectors not same length")
     else:
-        rmse = np.sqrt(np.sum(np.power(predicted-observed, 2))/np.size(predicted))
+        rmse = np.sqrt(np.sum(np.power(predicted-observed, 2)) \
+                /np.size(predicted))
     return rmse    
 
-def get_random_structures(filename, nTotal, nRand):
+def get_random_structures(filename, nTotal, nRand, output='.'):
     """
         Creates new xyz file comprising a random
         selection of structures from an input xyz file
@@ -217,12 +72,12 @@ def get_random_structures(filename, nTotal, nRand):
         nTotal: total number of structures (in input file)
         nRand: number of structures to select randomly
     """
-    sys.stderr.write('Selecting random structures...\n')
+    sys.stdout.write('Selecting random structures...\n')
     randIdxs = random.sample(range(0, nTotal), nRand)
     structCount = -1
     headerCount = 0 
     randCount = 0
-    g = open('randomSelection.xyz', 'w')
+    g = open('%s/randomSelection.xyz' % output, 'w')
     
     with open(filename) as f:
         for line in f:
@@ -245,7 +100,7 @@ def get_random_structures(filename, nTotal, nRand):
                     continue
     g.close()
 
-def do_FPS(x, D=0):
+def do_FPS(x, D=0, output='.'):
     """
         Farthest point sampling
 
@@ -253,7 +108,7 @@ def do_FPS(x, D=0):
         x: input data to sample using FPS
         D: number of points to select
     """
-    sys.stderr.write('Selecting FPS Points...\n')
+    sys.stdout.write('Selecting FPS Points...\n')
     if D == 0:
         D = len(x)
     n = len(x)
@@ -275,12 +130,13 @@ def do_FPS(x, D=0):
         lmin[i-1] = dl[iy[i]]
         nd = n2 + n2[iy[i]] - 2*np.dot(x, x[iy[i]])
         dl = np.minimum(dl, nd)
-        sys.stderr.write('Point: %d\r' % (i+1))
-    sys.stderr.write('\n')
-    np.savetxt('FPS.idxs', iy, fmt='%d')
+        sys.stdout.write('Point: %d\r' % (i+1))
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    np.savetxt('%s/FPS.idxs' % output, iy, fmt='%d')
     return iy
 
-def quick_FPS(x, D=0, cutoff=1.0E-3):
+def quick_FPS(x, D=0, cutoff=1.0E-3, output='.'):
     """
         "Quick" Farthest Point Sampling
 
@@ -289,18 +145,18 @@ def quick_FPS(x, D=0, cutoff=1.0E-3):
         D: number of points to select
         cutoff: minimum standard deviation for selection
     """
-    sys.stderr.write('Computing Quick FPS...\n')
+    sys.stdout.write('Computing Quick FPS...\n')
 
     # Select components where standard deviation is greater than the cutoff
     # (selects most diverse components
     quickFPS = np.where(np.std(x, axis=0)/np.mean(np.std(x, axis=0)) > cutoff)[0]
     if D != 0:
         quickFPS = quickFPS[0:D]
-    np.savetxt('quickFPS.idxs', quickFPS, fmt='%d')
-    sys.stderr.write('Selected %d points\n' % len(quickFPS))
+    np.savetxt('%s/quickFPS.idxs' % output, quickFPS, fmt='%d')
+    sys.stdout.write('Selected %d points\n' % len(quickFPS))
     return quickFPS
 
-def randomSelect(x, D=0):
+def randomSelect(x, D=0, output='.'):
     """
         Select random points
 
@@ -311,10 +167,11 @@ def randomSelect(x, D=0):
     idxs = range(0, len(x))
     np.random.shuffle(idxs)
     idxs = idxs[0:D]
-    np.savetxt('random.idxs', idxs, fmt='%d')
+    np.savetxt('%s/random.idxs' % output, idxs, fmt='%d')
     return idxs
 
-def compute_SOAPs(al, d, idxs=None, batchSize=0, prefix='SOAPs'):
+def compute_SOAPs(al, d, idxs=None, batchSize=0, 
+        prefix='SOAPs', output='.'):
     """
         Compute SOAP vectors
 
@@ -325,9 +182,8 @@ def compute_SOAPs(al, d, idxs=None, batchSize=0, prefix='SOAPs'):
         batchSize: number of structures to include in a batch
         prefix: prefix of output file
     """
-    cwd = os.getcwd()
-    sys.stderr.write('Computing SOAP vectors...\n')
-    g = open('SOAPFiles.dat', 'w')
+    sys.stdout.write('Computing SOAP vectors...\n')
+    g = open('%s/SOAPFiles.dat' % output, 'w')
     SOAPFiles = []
     SOAPs = []
     if batchSize < 1:
@@ -342,73 +198,20 @@ def compute_SOAPs(al, d, idxs=None, batchSize=0, prefix='SOAPs'):
         SOAPs.append(SOAP)
         if ((i+1) % batchSize) == 0:
             SOAPs = np.concatenate(SOAPs)
-            np.save(str('%s-%d' % (prefix, N)), SOAPs)
-            g.write('%s/%s-%d.npy\n' % (cwd, prefix, N))
+            np.save('%s/%s-%d' % (output, prefix, N), SOAPs)
+            g.write('%s/%s-%d.npy\n' % (os.path.abspath(output), prefix, N))
             SOAPs = []
             N += 1
-        sys.stderr.write('Frame: %d\r' % (i+1))
-    sys.stderr.write('\n')
+        sys.stdout.write('Frame: %d\r' % (i+1))
+        sys.stdout.flush()
+    sys.stdout.write('\n')
     if len(SOAPs) > 0:
         SOAPs = np.concatenate(SOAPs)
-        np.save(str('%s-%d' % (prefix, N)), SOAPs)
-        g.write('%s/%s-%d.npy\n' % (cwd, prefix, N))
+        np.save('%s/%s-%d' % (output, prefix, N), SOAPs)
+        g.write('%s/%s-%d.npy\n' % (os.path.abspath(output), prefix, N))
     g.close()
 
-def build_covariance(SOAPFiles):
-    """
-        Iteratively builds covariance
-
-        ---Arguments---
-        SOAPFiles: list of files containing SOAP vectors in ASCII format
-    """
-    sys.stderr.write('Building covariance...\n')
-    n = 0
-    for i in SOAPFiles:
-        with open(i, 'r') as f:
-            for line in f:
-                SOAP = np.asarray([float(x) for x in line.strip().split()])
-                if n == 0:
-                    p = np.shape(SOAP)[0]
-                    SOAPMean = np.zeros(p)
-                    C = np.zeros((p, p))
-                n += 1
-                C += (n-1)/float(n) * np.outer(SOAP-SOAPMean, SOAP-SOAPMean)
-                SOAPMean = ((n-1)*SOAPMean + SOAP)/n 
-                sys.stderr.write('Center: %d\r' % n)
-    sys.stderr.write('\n')
-    C = np.divide(C, n-1)
-    sys.stderr.write('Saving covariance...\n')
-    np.savetxt('cov.dat', C)
-    sys.stderr.write('Saving mean...\n')
-    np.savetxt('mean.dat', SOAPMean)
-
-def build_PCA(C, nPCA):
-    """
-        Builds PCA from an input covariance matrix
-        
-        ---Arguments---
-        C: covariance matrix
-        nPCA: number of PCA components
-    """
-    sys.stderr.write('Building PCA...\n')
-    p = np.shape(C)[0]
-    u, V = np.linalg.eigh(C)
-    u = np.flip(u, axis=0)
-    V = np.flip(V, axis=1)
-    D = np.zeros((p, p))
-    g = np.zeros(p)
-    for i in range(0, p):
-        D[i, i] = u[i]
-        g[i] = np.sum(D[0:i+1, 0:i+1])
-
-    varRatio = g[0:nPCA]/g[-1]
-    print "Variance Ratio", varRatio
-    W = V[:, 0:nPCA]
-    np.savetxt('eigenvectors.dat', W)
-    np.savetxt('ratio.dat', varRatio)
-    return W
-
-def build_iPCA(SOAPFiles, nPCA, batchSize):
+def build_iPCA(SOAPFiles, nPCA, batchSize, output='.'):
     """
         Builds PCA incrementally using SciKit Learn
         incremental PCA
@@ -418,7 +221,7 @@ def build_iPCA(SOAPFiles, nPCA, batchSize):
         nPCA: number of PCA components
         batchSize: batchSize for building the incremental PCA
     """
-    sys.stderr.write('Building PCA...\n')
+    sys.stdout.write('Building PCA...\n')
     PCABuilder = IncrementalPCA(n_components=nPCA, batch_size=batchSize)
     batch = []
     b = 0
@@ -426,19 +229,21 @@ def build_iPCA(SOAPFiles, nPCA, batchSize):
     for idx, i in enumerate(SOAPFiles):
         SOAP = read_SOAP(i)
         PCABuilder.partial_fit(SOAP)
-        sys.stderr.write('Batch: %d\r' % (idx+1))
-    sys.stderr.write('\n')
-    sys.stderr.write('Computing covariance...\n')
+        sys.stdout.write('Batch: %d\r' % (idx+1))
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    sys.stdout.write('Computing covariance...\n')
     C  = PCABuilder.get_covariance()
-    sys.stderr.write('Saving covariance...\n')
-    np.savetxt('cov.dat', C)
-    sys.stderr.write('Saving mean...\n')
-    np.savetxt('mean.dat', PCABuilder.mean_)
-    sys.stderr.write('Saving eigenvectors...\n')
-    np.savetxt('eigenvectors.dat', np.transpose(PCABuilder.components_))
+    sys.stdout.write('Saving covariance...\n')
+    np.savetxt('%s/cov.dat' % output, C)
+    sys.stdout.write('Saving mean...\n')
+    np.savetxt('%s/mean.dat' % output, PCABuilder.mean_)
+    sys.stdout.write('Saving eigenvectors...\n')
+    np.savetxt('%s/eigenvectors.dat' % output, 
+            np.transpose(PCABuilder.components_))
     return PCABuilder
 
-def transform_PCA(W, SOAPMean, SOAPFiles):
+def transform_PCA(W, SOAPMean, SOAPFiles, output='.'):
     """
         Transforms data according to the PCA
 
@@ -447,20 +252,20 @@ def transform_PCA(W, SOAPMean, SOAPFiles):
         SOAPMean: mean of input data
         SOAPFiles: list of files containing SOAP vectors
     """
-    cwd = os.getcwd()
-    sys.stderr.write('Transforming PCA...\n')
-    g = open('PCAFiles.dat', 'w')
+    sys.stdout.write('Transforming PCA...\n')
+    g = open('%s/PCAFiles.dat' % output, 'w')
     for idx, i in enumerate(SOAPFiles):
         #ct = 1
         SOAP = read_SOAP(i)
         transformedSOAP = np.inner(SOAP-SOAPMean, W.T)
-        np.save(str('pca-%d' % idx), transformedSOAP)
-        g.write('%s/pca-%d.npy\n' % (cwd, idx))
-        sys.stderr.write('Batch: %d\r' % (idx+1)) 
-    sys.stderr.write('\n')
+        np.save('%s/pca-%d' % (output, idx), transformedSOAP)
+        g.write('%s/pca-%d.npy\n' % (os.path.abspath(output), idx))
+        sys.stdout.write('Batch: %d\r' % (idx+1)) 
+        sys.stdout.flush()
+    sys.stdout.write('\n')
     g.close()
 
-def reconstruct_PCA(W, SOAPMean, PCAFiles, useRawData=False):
+def reconstruct_PCA(W, SOAPMean, PCAFiles, useRawData=False, output='.'):
     """
         Reconstruct original data from PCA
 
@@ -472,25 +277,25 @@ def reconstruct_PCA(W, SOAPMean, PCAFiles, useRawData=False):
                     reconstruct using PCA data
         save: if True, save reconstructed data to file
     """
-    cwd = os.getcwd()
-    sys.stderr.write('Reconstructing data from PCA...\n')
-    g = open('rSOAPFiles.dat', 'w')
+    sys.stdout.write('Reconstructing data from PCA...\n')
+    g = open('%s/rSOAPFiles.dat' % output, 'w')
     for idx, i in enumerate(PCAFiles):
         PCA = read_SOAP(i)
         if useRawData is True:
             transformedPCA = np.inner(PCA, np.inner(W, W)) + SOAPMean
         else:
             transformedPCA = np.inner(PCA, W) + SOAPMean
-        np.save(str('rSOAP-%d' % idx), transformedPCA)
-        g.write('%s/rSOAP-%d.npy\n' % (cwd, idx))
-        sys.stderr.write('Batch: %d\r' % (idx+1)) 
-    sys.stderr.write('\n')
+        np.save('%s/rSOAP-%d' % (output, idx), transformedPCA)
+        g.write('%s/rSOAP-%d.npy\n' % (os.path.abspath(output), idx))
+        sys.stdout.write('Batch: %d\r' % (idx+1)) 
+        sys.stdout.flush()
+    sys.stdout.write('\n')
     g.close()
 
 def build_repSOAPs(inputFiles, repIdxs):
     repSOAPs = []
     n = 0
-    sys.stderr.write('Building representative environments...\n')
+    sys.stdout.write('Building representative environments...\n')
     for idx, i in enumerate(inputFiles):
         iSOAP = read_SOAP(i)
         subIdxs = np.intersect1d(repIdxs[np.where(repIdxs >= n)],
@@ -545,24 +350,53 @@ def center_data(SOAPFile):
         f.write('%s-centered.npy\n' % os.path.splitext(i)[0])
     f.close()
 
+def sparse_kPCA_transform(inputFilesTrain, inputFilesTest, repIdxs, U,
+        kernel='gaussian', zeta=1, width=1.0, nPCA=None, lowmem=True, output='.'):
+    """
+        Transform the kernel PCA
+        FOR TESTING ONLY
+    """
+    train_SOAP = read_SOAP(inputFilesTrain[0])
+    test_SOAP = read_SOAP(inputFilesTest[0])
+    n = train_SOAP.shape[0]
+    l = test_SOAP.shape[0]
+
+    kLN = build_kernel(test_SOAP, train_SOAP,
+            kernel=kernel, zeta=zeta, width=width, nc=None)
+    kNN = build_kernel(train_SOAP, train_SOAP,
+            kernel=kernel, zeta=zeta, width=width, nc=None)
+
+    # Kernel centering based on: 
+    # https://www.ics.uci.edu/~welling/classnotes/papers_class/Kernel-PCA.pdf
+    L = np.ones((l, 1))/n
+    N = np.ones((1, n))/n
+    M1 = np.dot(np.sum(kLN, axis=1).reshape((l, 1)), N)
+    M2 = np.dot(L, np.sum(kNN, axis=1).reshape((1, n)))
+    M3 = np.dot(L, np.dot(np.sum(kNN), N))
+    kLN -= M1 + M2 + M3
+    np.savetxt('kpca_transform.dat', np.dot(kLN, U))
+
 def sparse_kPCA(inputFiles, repIdxs, kernel='gaussian', zeta=1, width=1.0, 
-        nPCA=None, loadings=False, useRaw=False, lowmem=True):
+        nPCA=None, lowmem=True, output='.'):
     """
        Build and transform the kernel PCA
 
        ---Arguments---
        inputFiles: list of files containing the data
        repIdxs: indices of environments to use as the representatives
+
+       The procedure is adapted from that stated in the SAS
+       user manual: https://documentation.sas.com/?docsetId=imlug&docsetTarget=imlug_langref_sect226.htm&docsetVersion=15.1&locale=en
     """
 
     # Read inputfiles and build repSOAPs
     repSOAPs = build_repSOAPs(inputFiles, repIdxs)
-    cwd = os.getcwd()
-    f = open('KPCAFiles.dat', 'w')
+    f = open('%s/KPCAFiles.dat' % output, 'w')
 
     # Build kNM
     kNM = build_kernel_batch(inputFiles, repSOAPs,
-            kernel=kernel, zeta=zeta, width=width, nc=None, lowmem=lowmem)
+            kernel=kernel, zeta=zeta, width=width, nc=None, 
+            lowmem=lowmem, output=output)
 
     # Build kMM
     kMM = build_kernel(repSOAPs, repSOAPs,
@@ -574,7 +408,7 @@ def sparse_kPCA(inputFiles, repIdxs, kernel='gaussian', zeta=1, width=1.0,
     U = np.flip(U, axis=1)
 
     # Take only positive eigenvalues
-    w = w[np.where(w > 0)]
+    w = w[w > 0]
     U = U[:, 0:w.size]
 
     W = np.diagflat(1.0/np.sqrt(w))
@@ -582,65 +416,69 @@ def sparse_kPCA(inputFiles, repIdxs, kernel='gaussian', zeta=1, width=1.0,
     if lowmem is True:
         # Compute G
         P = np.dot(U, np.dot(W, U.T))
+        # np.save('P', P)
         Gmean = np.zeros(kMM.shape[0])
         n = 0
         for idx, i in enumerate(kNM):
-            sys.stderr.write('Building approx kernel, batch %d\r' % (idx+1))
+            sys.stdout.write('Building approx kernel, batch %d\r' % (idx+1))
+            sys.stdout.flush()
             kNMi = np.load('%s.npy' % i)
             Gi = np.dot(kNMi, P)
             Gmean += np.sum(Gi, axis=0)
             n += kNMi.shape[0]
-            np.save('G%d' % idx, Gi)
-        sys.stderr.write('\n')
+            np.save('%s/G%d' % (output, idx), Gi)
+        sys.stdout.write('\n')
 
         Gmean /= n
+        # np.save('Gmean', Gmean)
 
         G = np.zeros(kMM.shape)
         n = 0
         m = 0
         for idx, i in enumerate(kNM):
-            sys.stderr.write('Centering approx. kernel, batch %d\r' % (idx+1))
-            Gi = np.load('G%d.npy' % idx)
+            sys.stdout.write('Centering approx. kernel, batch %d\r' % (idx+1))
+            sys.stdout.flush()
+            Gi = np.load('%s/G%d.npy' % (output, idx))
             Gi -= Gmean
             G += np.dot(Gi.T, Gi)
-        sys.stderr.write('\n')
+        sys.stdout.write('\n')
 
         # Eigendecomposition on (G.T)*G
         w, V = np.linalg.eigh(G)
+        # np.save('V', V) 
         w = np.flip(w, axis=0)
         V = np.flip(V, axis=1)
         W = np.diagflat(1.0/w)
+        uout = open('%s/U.npy' % output, 'w')
 
         # Approximate eigenvectors of kNN
         VW = np.dot(V, W)
         for idx, i in enumerate(kNM):
-            sys.stderr.write('Building approx. eigenvectors '\
+            sys.stdout.write('Building approx. eigenvectors '\
                     'and projecting, batch %d\r' % (idx+1))
-            Gi = np.load('G%d.npy' % idx)
-            Ui = np.dot(Gi, VW)
+            Gi = np.load('%s/G%d.npy' % (output, idx))
+            Ui = np.dot(Gi-Gmean, VW)
             
             # Retain desired number of principal components
             # and save the projections
             Ui = Ui[:, 0:nPCA]
             w = w[0:nPCA]
+            np.save(uout, Ui) 
 
-            if loadings is True:
-                Gi = np.dot(Ui, np.diagflat(np.sqrt(w)))
-            else:
-                Gi = np.dot(Ui, np.diagflat(w))
-            np.save('kpca-%d' % idx, Gi)
-            f.write('%s/kpca-%d.npy\n' % (cwd, idx))
-            os.system('rm G%d.npy k%d.npy' % (idx, idx))
-        sys.stderr.write('\n')
+            Gi = np.dot(Ui, np.diagflat(w))
+            np.save('%s/kpca-%d' % (output, idx), Gi)
+            f.write('%s/kpca-%d.npy\n' % (os.path.abspath(output), idx))
+            os.system('rm %s/G%d.npy %s/k%d.npy' % (output, idx, output, idx))
+        sys.stdout.write('\n')
 
     else:
         pass
         # Compute G
-        sys.stderr.write('Building approx. kernel...\n')
+        sys.stdout.write('Building approx. kernel...\n')
         G = np.dot(kNM, np.dot(U, np.dot(W, U.T)))
 
         # Center G
-        sys.stderr.write('Centering approx. kernel...\n')
+        sys.stdout.write('Centering approx. kernel...\n')
         G -= np.mean(G, axis=0)
 
         # Eigendecomposition on (G.T)*G
@@ -650,7 +488,7 @@ def sparse_kPCA(inputFiles, repIdxs, kernel='gaussian', zeta=1, width=1.0,
         W = np.diagflat(1.0/w)
 
         # Approximate eigenvectors of kNN
-        sys.stderr.write('Building approx. eigenvectors...\n')
+        sys.stdout.write('Building approx. eigenvectors...\n')
         U = np.dot(G, np.dot(V, W))
 
         # Retain desired number of principal components
@@ -658,12 +496,10 @@ def sparse_kPCA(inputFiles, repIdxs, kernel='gaussian', zeta=1, width=1.0,
         w = w[0:nPCA]
 
         # Projection
-        sys.stderr.write('Projecting...\n')
-        if loadings is True:
-            np.save('kpca-0', np.dot(U, np.diagflat(np.sqrt(w))))
-        else:
-            np.save('kpca-0', np.dot(U, np.diagflat(w)))
-        f.write('%s/kpca-0.npy\n' % cwd)
+        sys.stdout.write('Projecting...\n')
+        np.save('%s/U' % output, U)
+        np.save('%s/kpca-0' % output, np.dot(U, np.diagflat(w)))
+        f.write('%s/kpca-0.npy\n' % os.path.abspath(output))
 
     f.close()
 
@@ -676,10 +512,10 @@ def npy_convert(fileList):
 
     """
     for idx, i in enumerate(fileList):
-        sys.stderr.write('Converting file: %d\r' % (idx+1))
+        sys.stdout.write('Converting file: %d\r' % (idx+1))
         filename = os.path.splitext(i)[0]
-        np.savetxt(str('%s.dat' % filename), np.load(i))
-    sys.stderr.write('\n')
+        np.savetxt('%s.dat' % filename, np.load(i))
+    sys.stdout.write('\n')
 
 def npy_stdout(fileList):
     """
@@ -724,7 +560,7 @@ def extract_structure_properties(al, Z, propName=None):
     return structIdxs, nAtoms, volume, p
 
 def build_kernel_batch(inputFiles, SOAPs2, kernel='linear', 
-        zeta=1, width=1.0, nc=None, lowmem=False):
+        zeta=1, width=1.0, nc=None, lowmem=False, output='.'):
     """
         SOAP kernel between two SOAP vectors in batches
 
@@ -734,7 +570,7 @@ def build_kernel_batch(inputFiles, SOAPs2, kernel='linear',
         SOAPs2: input SOAP vectors
         zeta: exponent for nonlinear kernel
     """
-    sys.stderr.write('Building kernel...\n')
+    sys.stdout.write('Building kernel...\n')
     kList = []
     for idx, i in enumerate(inputFiles):
         SOAPs1 = read_SOAP(i)[:, 0:nc]
@@ -747,8 +583,8 @@ def build_kernel_batch(inputFiles, SOAPs2, kernel='linear',
         else:
             k = np.dot(SOAPs1, SOAPs2.T)**zeta
         if lowmem is True:
-            np.save('k%d' % idx, k)
-            kList.append('k%d' % idx)
+            np.save('%s/k%d' % (output, idx), k)
+            kList.append('%s/k%d' % (output, idx))
         else:
             kList.append(k)
     if lowmem is True:
@@ -765,7 +601,7 @@ def build_kernel(SOAPs1, SOAPs2, kernel='linear', zeta=1, width=1.0, nc=None):
         SOAPs1, SOAPs2: input SOAP vectors
         zeta: exponent for nonlinear kernel
     """
-    sys.stderr.write('Building kernel...\n')
+    sys.stdout.write('Building kernel...\n')
     if kernel == 'gaussian':
         d = cdist(SOAPs1, SOAPs2, metric='euclidean')
         k = gaussianKernel(d, width)
@@ -792,7 +628,7 @@ def build_sum_kernel_batch(inputFiles, SOAPs2, structIdxs, kernel='linear',
         kernel: type of kernel to build
         nc: number of components to use
     """
-    sys.stderr.write('Building sum kernel...\n')
+    sys.stdout.write('Building sum kernel...\n')
     k = np.zeros((len(structIdxs), len(SOAPs2)))
     n = 0
     for i in inputFiles:
@@ -826,7 +662,7 @@ def build_sum_kernel(SOAPs1, SOAPs2, structIdxs, kernel='linear',
                     (output by extract_structure_properties)
         zeta: exponent for nonlinear kernel
     """
-    sys.stderr.write('Building sum kernel...\n')
+    sys.stdout.write('Building sum kernel...\n')
     k = np.zeros((len(structIdxs), len(SOAPs2)))
     n = 0
     for i in range(0, len(structIdxs)):
@@ -844,31 +680,9 @@ def build_sum_kernel(SOAPs1, SOAPs2, structIdxs, kernel='linear',
         n += structIdxs[i]
     return k
 
-def build_structure_kernel(SOAPs1, SOAPs2, structIdxs, zeta=1):
-    """
-        Build structural kernel
-
-        ---Arguments---
-        SOAPs1, SOAPs2: input SOAP vectors
-        structIdxs: list of indices indicating which
-                    SOAP vectors belong to which structure
-                    (output by extract_structure_properties)
-        zeta: exponent for nonlinear kernel
-    """
-    k = np.zeros((len(structIdxs), len(structIdxs)))
-    n = 0
-    for i in range(0, len(structIdxs)):
-        m = 0
-        iSOAP = SOAPs1[n:strucIdxs[i]+n]
-        kRow = np.sum(np.dot(iSOAP, SOAPs2.T)**zeta, axis=0)
-        for j in range(0, len(structIdxs)):
-            k[i, j] = np.sum(kRow[m:structIdxs[j]+m], axis=1)
-            m += structIdxs[j]
-        n += structIdxs[i]
-    return k
-
 def property_regression(y, kMM, kNM, nStruct, idxsTrain, idxsValidate, 
-                        sigma=1.0, jitter=1.0E-16, envKernel=None):
+                        sigma=1.0, jitter=1.0E-16, 
+                        envKernel=None, output='.'):
     """
         Perform property decomposition
 
@@ -904,13 +718,13 @@ def property_regression(y, kMM, kNM, nStruct, idxsTrain, idxsValidate,
             for idx, i in enumerate(envKernel):
                 iKernel = read_SOAP('%s.npy'% i)
                 yyEnv = np.dot(iKernel, w)
-                np.savetxt('envProperties-%d.dat' % idx, yyEnv)
+                np.savetxt('%s/envProperties-%d.dat' % (output, idx), yyEnv)
         else:
 
             # Decompose structural property into 
             # environmental contributions; save
             yyEnv = np.dot(envKernel, w)
-            np.savetxt('envProperties.dat', yyEnv)
+            np.savetxt('%s/envProperties.dat' % output, yyEnv)
 
     return y[idxsTrain], y[idxsValidate], yy[idxsTrain], yy[idxsValidate]
 

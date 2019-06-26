@@ -16,7 +16,6 @@ al.sort(attr='Filename')
 out = qp.AtomsWriter(args.output)
 
 for i, at in enumerate(al):
-    #print at.params['Filename'][0:-4]
     out.write(at)
 out.close()
 

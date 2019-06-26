@@ -9,11 +9,18 @@ import numpy as np
 import SOAPTools
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-soap', type=str, default='SOAPFiles.dat', help='File containing SOAP vectors')
-parser.add_argument('-fps', type=int, default=0, help='Number of SOAP components to select via FPS')
-parser.add_argument('-qfps', type=float, default=0, help='Cutoff for Quick FPS')
-parser.add_argument('-nr', type=int, default=0, help='Number of random indices to select')
-parser.add_argument('-c', action='store_true', help='Select on components')
+parser.add_argument('-soap', type=str, default='SOAPFiles.dat', 
+        help='File containing SOAP vectors')
+parser.add_argument('-fps', type=int, default=0, 
+        help='Number of SOAP components to select via FPS')
+parser.add_argument('-qfps', type=float, default=0, 
+        help='Cutoff for Quick FPS')
+parser.add_argument('-nr', type=int, default=0, 
+        help='Number of random indices to select')
+parser.add_argument('-c', action='store_true', 
+        help='Select on components')
+parser.add_argument('-output', type=str, default='.',
+        help='Directory where outputs should be saved')
 
 args = parser.parse_args()
 
@@ -34,7 +41,7 @@ newIdxs = []
 n = 0
 nEnv = 0
 for idx, i in enumerate(inputFiles):
-    sys.stderr.write('Reading SOAPs in batch %d...\n' % (idx+1))
+    sys.stdout.write('Reading SOAPs in batch %d...\n' % (idx+1))
     if os.path.splitext(i)[1] == '.npy':
         SOAP = np.load(i)
     else:
@@ -60,23 +67,23 @@ for idx, i in enumerate(inputFiles):
     nEnv += len(SOAP)
 
 if len(subFPS) > 1:
-    sys.stderr.write('Selecting FPS Points from subsample...\n')
+    sys.stdout.write('Selecting FPS Points from subsample...\n')
     newIdxs = np.concatenate(newIdxs)
     subFPS = np.concatenate(subFPS)
 
     # Do FPS on the concatenated FPS points
     if args.qfps > 0:
         idxs = SOAPTools.quick_FPS(subFPS.T, D=args.fps, cutoff=args.qfps)
-        np.savetxt('quickFPS.idxs', newIdxs[idxs], fmt='%d')
+        np.savetxt('%s/quickFPS.idxs' % args.output, newIdxs[idxs], fmt='%d')
     elif args.fps > 0:
         idxs = SOAPTools.do_FPS(subFPS, D=args.fps)
-        np.savetxt('FPS.idxs', newIdxs[idxs], fmt='%d')
+        np.savetxt('%s/FPS.idxs' % args.output, newIdxs[idxs], fmt='%d')
 else:
     newIdxs = np.asarray(newIdxs).flatten()
     if args.qfps > 0:
-        np.savetxt('quickFPS.idxs', newIdxs, fmt='%d')
+        np.savetxt('%s/quickFPS.idxs' % args.output, newIdxs, fmt='%d')
     elif args.fps > 0:
-        np.savetxt('FPS.idxs', newIdxs, fmt='%d')
+        np.savetxt('%s/FPS.idxs' % args.output, newIdxs, fmt='%d')
 
 # Random selection
 if args.nr > 0:
@@ -84,5 +91,5 @@ if args.nr > 0:
     np.random.shuffle(randomIdxs)
     randomIdxs = randomIdxs[0:args.nr]
     randomIdxs.sort()
-    np.savetxt('random.idxs', randomIdxs, fmt='%d')
+    np.savetxt('%s/random.idxs' % args.output, randomIdxs, fmt='%d')
 

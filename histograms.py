@@ -8,12 +8,15 @@ import SOAPTools
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-deem', type=str, default='SOAPFiles.dat',
-                    help='File containing SOAP file filenames for DEEM')
+        help='File containing SOAP file filenames for DEEM')
 parser.add_argument('-iza', type=str, default='SOAPFiles.dat',
-                    help='File containing SOAP file filenames for IZA')
-parser.add_argument('-zeta', type=float, default=2, help='SOAP kernel zeta')
-parser.add_argument('-nbins', type=int, default=200, help='Number of histogram bins')
-parser.add_argument('-idxs', type=str, default='FPS.idxs', help='File with FPS indices')
+        help='File containing SOAP file filenames for IZA')
+parser.add_argument('-zeta', type=float, default=1, 
+        help='SOAP kernel zeta')
+parser.add_argument('-nbins', type=int, default=200, 
+        help='Number of histogram bins')
+parser.add_argument('-idxs', type=str, default='FPS.idxs', 
+        help='File with FPS indices')
 
 args = parser.parse_args()
 
@@ -26,7 +29,7 @@ if idxsRef.ndim > 1:
     idxsRef = idxsRef[0]
 
 # Sample DEEM environments
-sys.stderr.write('Reading SOAPs A...\n')
+sys.stdout.write('Reading SOAPs A...\n')
 f = open(args.deem, 'r')
 inputFiles = f.readlines()
 inputFiles = [i.strip() for i in inputFiles]
@@ -38,7 +41,7 @@ for idx, i in enumerate(inputFiles):
 SOAPsA = np.concatenate(SOAPsA)
 
 # Read all IZA environments
-sys.stderr.write('Reading SOAPs B...\n')
+sys.stdout.write('Reading SOAPs B...\n')
 g = open(args.iza, 'r')
 inputFiles = g.readlines()
 inputFiles = [i.strip() for i in inputFiles]
@@ -48,13 +51,13 @@ for i in inputFiles:
     SOAPsB.append(np.load(i))
 SOAPsB = np.concatenate(SOAPsB)
 
-sys.stderr.write('Computing kernel distance...\n')
+sys.stdout.write('Computing kernel distance...\n')
 
 kii = SOAPTools.build_kernel(SOAPsA, SOAPsA, zeta=args.zeta)
 kjj = SOAPTools.build_kernel(SOAPsB, SOAPsB, zeta=args.zeta)
 kij = SOAPTools.build_kernel(SOAPsA, SOAPsB, zeta=args.zeta)
 
-sys.stderr.write('Computing histograms...\n')
+sys.stdout.write('Computing histograms...\n')
 
 # Histogram of full kernel between DEEM and DEEM
 D = SOAPTools.kernel_distance(np.diag(kii), np.diag(kii), kii)
