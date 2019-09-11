@@ -66,11 +66,13 @@ elif args.p == 'volume':
     #                cancels the error so the 
     #                decomposed volumes are per Si
     p /= nAtoms/3 # Gives volume per Si the "correct" way
-                  # Gives results consistent with the "incorrect"
+                  # Theoretically, should give results 
+                  # consistent with the "incorrect"
                   # way if the the regularization sigma
                   # is multiplied by 9 (the jitter is scaled
                   # "automatically" as it depends on the eigenvalues
-                  # of kernels)
+                  # of kernels), though in practice the results
+                  # appear to differ slightly
 
 # Shuffle training indices for each iteration
 randomIdxs = np.arange(0, len(structIdxs))
@@ -90,6 +92,8 @@ envKernel = None
 ### PROPERTY REGRESSION ###
 # Perform property decomposition
 sys.stdout.write('Performing property regression...\n')
+
+# Build desired kernels
 if args.kernel == 'gaussian':
     dMM = cdist(repSOAPs[:, 0:args.npca], 
             repSOAPs[:, 0:args.npca], metric='euclidean')
@@ -97,6 +101,8 @@ if args.kernel == 'gaussian':
     kNM = SOAPTools.build_sum_kernel_batch(inputFiles, 
             repSOAPs[:, 0:args.npca],
             structIdxs, kernel='gaussian', width=args.width, nc=args.npca)
+
+    # Build environment kernel, if required
     if args.env is True:
         envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                 repSOAPs[:, 0:args.npca], 
@@ -109,23 +115,30 @@ elif args.kernel == 'laplacian':
     kNM = SOAPTools.build_sum_kernel_batch(inputFiles, 
             repSOAPs[:, 0:args.npca],
             structIdxs, kernel='laplacian', width=args.width, nc=args.npca)
+
+    # Build environment kernel, if required
     if args.env is True:
         envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                 repSOAPs[:, 0:args.npca],
                 kernel='laplacian', width=args.width, 
                 nc=args.npca, lowmem=args.lowmem, output=args.output)
-else: # standard soaps
+else: # linear kernel
     kMM = SOAPTools.build_kernel(repSOAPs[:, 0:args.npca], 
             repSOAPs[:, 0:args.npca], zeta=args.zeta)
     kNM = SOAPTools.build_sum_kernel_batch(inputFiles, 
             repSOAPs[:, 0:args.npca], 
             structIdxs, zeta=args.zeta, nc=args.npca)
+
+    # Build environment kernel, if required
     if args.env is True:
         envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                 repSOAPs[:, 0:args.npca],
                 zeta=args.zeta, nc=args.npca, 
                 lowmem=args.lowmem, output=args.output)
 
+# Scale kernel matrices so that
+# they represent the average kernel
+# over the structure properties
 if args.p == 'Energy_per_Si':
     kNM = (kNM.T*3/nAtoms).T
 else:
@@ -135,22 +148,29 @@ else:
     #                           cancels the error so the decomposed 
     #                           volumes are per Si
     kNM = (kNM.T*3/nAtoms).T # Gives volume per Si the "correct" way
-                             # Gives results consistent with the "incorrect"
+                             # Theoretically, should give 
+                             # results consistent with the "incorrect"
                              # way if the the regularization sigma
                              # is multiplied by 9 (the jitter is scaled
                              # "automatically" as it depends on the eigenvalues
-                             # of kernels)
+                             # of kernels), though in practice the results
+                             # appear to differ slightly
 
+# Header for output file with parameter information
+# about the regression
 header = 'Kernel = %s, Width = %1.3E, Zeta = %1.3E, '\
         'Sigma = %1.3E, nPCA = %s, nTrain = %d, '\
         'Property = %s' % (args.kernel, args.width, args.zeta,
                 args.sigma, args.npca, args.ntrain, args.p)
+
+# Perform KRR
 yTrain, yTest, yyTrain, yyTest \
         = SOAPTools.property_regression(p, kMM, kNM, 
                 len(structIdxs), trainIdxs, testIdxs, 
                 sigma=args.sigma, jitter=args.j, 
                 envKernel=envKernel, output=args.output)
 
+# Save regression output as [True value, predicted value]
 np.savetxt('%s/yTrain.dat' % args.output, 
         np.column_stack((yTrain, yyTrain)), header=header)
 np.savetxt('%s/yTest.dat' % args.output, 

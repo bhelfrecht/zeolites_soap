@@ -40,6 +40,9 @@ newIdxs = []
 
 n = 0
 nEnv = 0
+
+# Loop over the batches
+# and do FPS for each batch
 for idx, i in enumerate(inputFiles):
     sys.stdout.write('Reading SOAPs in batch %d...\n' % (idx+1))
     if os.path.splitext(i)[1] == '.npy':
@@ -66,6 +69,9 @@ for idx, i in enumerate(inputFiles):
 
     nEnv += len(SOAP)
 
+# Take our FPS points for each batch,
+# and do another FPS on the concatenated
+# subselection
 if len(subFPS) > 1:
     sys.stdout.write('Selecting FPS Points from subsample...\n')
     newIdxs = np.concatenate(newIdxs)
@@ -78,6 +84,9 @@ if len(subFPS) > 1:
     elif args.fps > 0:
         idxs = SOAPTools.do_FPS(subFPS, D=args.fps)
         np.savetxt('%s/FPS.idxs' % args.output, newIdxs[idxs], fmt='%d')
+
+# If we only have one batch,
+# we don't need to subselect, just save and exit
 else:
     newIdxs = np.asarray(newIdxs).flatten()
     if args.qfps > 0:

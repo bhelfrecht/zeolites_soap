@@ -33,7 +33,7 @@ args = parser.parse_args()
 ### BUILD PCA ###
 if args.dopca is True:
 
-    # Read SOAP vectors
+    # Read SOAP vector files
     f = open(args.soap, 'r')
     inputFiles = f.readlines()
     inputFiles = [i.strip() for i in inputFiles]
@@ -50,7 +50,7 @@ if args.dotransform is True:
     W = np.loadtxt(args.w)
     SOAPMean = np.loadtxt(args.mean)
 
-    # Read SOAP vectors
+    # Read SOAP vector files
     f = open(args.soap, 'r')
     inputFiles = f.readlines()
     inputFiles = [i.strip() for i in inputFiles]

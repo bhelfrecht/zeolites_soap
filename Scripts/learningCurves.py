@@ -82,11 +82,13 @@ elif args.p == 'volume':
      #                (per atom instead of per Si)
      #                cancels the error so the MAE are per Si
      p /= nAtoms/3 # Gives volume per Si the "correct" way
-                   # Gives results consistent with the "incorrect"
+                   # Theoretically, should give results 
+                   # consistent with the "incorrect"
                    # way if the the regularization sigma
                    # is multiplied by 9 (the jitter is scaled
                    # "automatically" as it depends on the eigenvalues
-                   # of kernels)
+                   # of kernels), though in practice the results appear
+                   # to differ slightly
 
 # Get k-fold indices
 trainIdxs = np.loadtxt(args.train, dtype=np.int)
@@ -131,11 +133,15 @@ for idx, i in enumerate(args.pcalearn):
     for wdx, w in enumerate(args.width):
         if w is not None:
             sys.stdout.write('----> Width: %.2e\n' % w)
+
+        # Build the appropriate kernel
         if args.kernel == 'gaussian':
             dMM = cdist(repSOAPs[:, 0:i], repSOAPs[:, 0:i], metric='euclidean')
             kMM = SOAPTools.gaussianKernel(dMM, w)
             kNM = SOAPTools.build_sum_kernel_batch(inputFiles, repSOAPs[:, 0:i],
                     structIdxs, kernel='gaussian', width=w, nc=i)
+
+            # Build environment kernel, if required
             if args.env is True:
                 envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                         repSOAPs[:, 0:i], kernel='gaussian', 
@@ -145,19 +151,27 @@ for idx, i in enumerate(args.pcalearn):
             kMM = SOAPTools.laplacianKernel(dMM, w)
             kNM = SOAPTools.build_sum_kernel_batch(inputFiles, repSOAPs[:, 0:i],
                     structIdxs, kernel='laplacian', width=w, nc=i)
+
+            # Build environment kernel, if required
             if args.env is True:
                 envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                         repSOAPs[:, 0:i], kernel='laplacian', 
                         width=w, nc=i, lowmem=args.lowmem)
-        else: # standard soaps
+        else: # linear kernel
             kMM = SOAPTools.build_kernel(repSOAPs[:, 0:i], repSOAPs[:, 0:i], 
                     zeta=args.zeta)
             kNM = SOAPTools.build_sum_kernel_batch(inputFiles, repSOAPs[:, 0:i],
                     structIdxs, zeta=args.zeta, nc=i)
+
+            # Build environment kernel, if required
             if args.env is True:
                 envKernel = SOAPTools.build_kernel_batch(inputFiles, 
                         repSOAPs[:, 0:i], zeta=args.zeta, 
                         nc=i, lowmem=args.lowmem)
+
+        # Scale the kernel matrices so that
+        # they represent the average kernel
+        # over the structure properties
         if args.p == 'Energy_per_Si':
             kNM = (kNM.T*3/nAtoms).T
         else:
@@ -167,12 +181,16 @@ for idx, i in enumerate(args.pcalearn):
             #                           (per atom instead of per Si)
             #                           cancels the error so the MAE are per Si
             kNM = (kNM.T*3/nAtoms).T # Gives volume per Si the "correct" way
-                                     # Gives results consistent with 
+                                     # Theoretically, should give results consistent with 
                                      # the "incorrect" way if the 
                                      # regularization sigma is multiplied by 9 
                                      # (the jitter is scaled "automatically" 
                                      # as it depends on the eigenvalues
-                   # of kernels)
+                                     # of kernels), though in practice the results
+                                     # appear to differ slightly
+
+        # Compute learning curves for each set
+        # of hyperparameters
         for sdx, s in enumerate(args.sigma):
             sys.stdout.write('---> Sigma: %.2e\n' % s)
             for jdx, j in enumerate(args.j):
@@ -182,20 +200,29 @@ for idx, i in enumerate(args.pcalearn):
                     for k in range(0, args.k):
                         sys.stdout.write('> Iteration: %d\r' % (k+1))
                         sys.stdout.flush()
+
+                        # Set up the test and training sets
                         if args.shuffle:
                             np.random.shuffle(trainIdxs[k])
                         idxsTrain = trainIdxs[k, 0:n]
                         idxsValidate = validateIdxs[k]
+
+                        # Perform the KRR
                         yTrain, yTest, yyTrain, yyTest \
                                 = SOAPTools.property_regression(p, kMM, kNM, 
                                         len(structIdxs), idxsTrain, 
                                         idxsValidate, sigma=s, 
                                         envKernel=envKernel, jitter=j,
                                         output=args.output)
+
+                        # Write out some debug error info
                         #np.savetxt('yTrain-PCA%d-%d-%d.dat' % (i, n, k),
                         #        np.column_stack((yTrain, yyTrain)))
                         #np.savetxt('yTest-PCA%d-%d-%d.dat' % (i, n, k),
                         #        np.column_stack((yTest, yyTest)))
+
+                        # Build the error matrices (see analysis notebooks
+                        # for full explanation of the matrix structure)
                         maeTrain[k, idx, wdx, sdx, jdx, ndx, -1] \
                                 = SOAPTools.MAE(yyTrain, yTrain)
                         maeTest[k, idx, wdx, sdx, jdx, ndx, -1] \
@@ -209,6 +236,8 @@ for idx, i in enumerate(args.pcalearn):
                             for ydx, y in enumerate([k, i, w, s, j, n]):
                                 x[k, idx, wdx, sdx, jdx, ndx, ydx] = y
     
+                    # Build the average error matrices (see analysis notebooks
+                    # for full explanation of the matrix structure)
                     maeAvgTrain[idx, wdx, sdx, jdx, ndx, -2] \
                             = np.mean(maeTrain[:, idx, wdx, sdx, jdx, ndx, -1])
                     maeAvgTest[idx, wdx, sdx, jdx, ndx, -2] \
@@ -233,6 +262,7 @@ for idx, i in enumerate(args.pcalearn):
                             x[idx, wdx, sdx, jdx, ndx, ydx] = y
                     sys.stdout.write('\n')
 
+# Save error matrices to file
 np.save('%s/maeAvgTrain.npy' % args.output, maeAvgTrain)
 np.save('%s/maeAvgTest.npy' % args.output, maeAvgTest)
 np.save('%s/rmseAvgTrain.npy' % args.output, rmseAvgTrain)
