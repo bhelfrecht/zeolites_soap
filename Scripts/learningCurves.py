@@ -16,7 +16,8 @@ parser.add_argument('-soap', type=str, default='SOAPFiles.dat',
 parser.add_argument('-idxs', type=str, default='FPS.idxs', 
         help='File with FPS indices')
 parser.add_argument('-p', type=str, default='volume', 
-        choices=['volume', 'Energy_per_Si'], 
+        choices=['volume', 'Energy_per_Si', 'InteractPot', 'ThreeBodyPot', 
+            'MMReal', 'MMReciprocal', 'MM'], 
         help='Property name for regression')
 parser.add_argument('-Z', type=int, nargs='+', default=None, 
         help='Space separated atomic numbers of center species')
@@ -66,7 +67,22 @@ structIdxs, nAtoms, volume, p \
         = SOAPTools.extract_structure_properties(al, args.Z, propName=args.p)
 
 # Scale property
-if args.p == 'Energy_per_Si':
+if args.p == 'volume':
+     p /= nAtoms #<-- originally calculated MAE with this,
+     #                but the wrong normalization in the kernel
+     #                (per atom instead of per Si)
+     #                makes the MAE per atom instead of per Si,
+     #                but the environment properties are still
+     #                in units volume (per Si)
+     #p /= nAtoms/3 # Gives volume per Si the "correct" way
+                   # Theoretically, should give results 
+                   # consistent with the "incorrect"
+                   # way if the the regularization sigma
+                   # is multiplied by 9 (the jitter is scaled
+                   # "automatically" as it depends on the eigenvalues
+                   # of kernels)
+
+else:
 
     # Convert to total energy
     p *= nAtoms/3
@@ -76,19 +92,6 @@ if args.p == 'Energy_per_Si':
 
     # Convert back to energy per Si
     p /= nAtoms/3
-elif args.p == 'volume':
-     #p /= nAtoms <-- originally calculated MAE with this,
-     #                but the wrong normalization in the kernel
-     #                (per atom instead of per Si)
-     #                cancels the error so the MAE are per Si
-     p /= nAtoms/3 # Gives volume per Si the "correct" way
-                   # Theoretically, should give results 
-                   # consistent with the "incorrect"
-                   # way if the the regularization sigma
-                   # is multiplied by 9 (the jitter is scaled
-                   # "automatically" as it depends on the eigenvalues
-                   # of kernels), though in practice the results appear
-                   # to differ slightly
 
 # Get k-fold indices
 trainIdxs = np.loadtxt(args.train, dtype=np.int)
@@ -172,22 +175,21 @@ for idx, i in enumerate(args.pcalearn):
         # Scale the kernel matrices so that
         # they represent the average kernel
         # over the structure properties
-        if args.p == 'Energy_per_Si':
-            kNM = (kNM.T*3/nAtoms).T
-        else:
-            #kNM = (kNM.T/nAtoms).T <-- originally calculated MAE with this,
-            #                           but the wrong normalization 
-            #                           in the kernel
+        if args.p == 'volume':
+            kNM = (kNM.T/nAtoms).T #<-- originally calculated MAE with this,
+            #                           but the wrong normalization in the kernel
             #                           (per atom instead of per Si)
-            #                           cancels the error so the MAE are per Si
-            kNM = (kNM.T*3/nAtoms).T # Gives volume per Si the "correct" way
+            #                           makes the MAE per atom but the environment
+            #                           properties are still in units volume (per Si)
+            #kNM = (kNM.T*3/nAtoms).T # Gives volume per Si the "correct" way
                                      # Theoretically, should give results consistent with 
                                      # the "incorrect" way if the 
                                      # regularization sigma is multiplied by 9 
                                      # (the jitter is scaled "automatically" 
                                      # as it depends on the eigenvalues
-                                     # of kernels), though in practice the results
-                                     # appear to differ slightly
+                                     # of kernels)
+        else:
+            kNM = (kNM.T*3/nAtoms).T
 
         # Compute learning curves for each set
         # of hyperparameters

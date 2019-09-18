@@ -153,9 +153,6 @@ def do_FPS(x, D=0, output='.'):
         sys.stdout.flush()
 
     sys.stdout.write('\n')
-
-    # Write output
-    np.savetxt('%s/FPS.idxs' % output, iy, fmt='%d')
     return iy
 
 def quick_FPS(x, D=0, cutoff=1.0E-3, output='.'):
@@ -178,8 +175,6 @@ def quick_FPS(x, D=0, cutoff=1.0E-3, output='.'):
     if D != 0:
         quickFPS = quickFPS[0:D]
 
-    # Save output
-    np.savetxt('%s/quickFPS.idxs' % output, quickFPS, fmt='%d')
     sys.stdout.write('Selected %d points\n' % len(quickFPS))
     return quickFPS
 
@@ -199,9 +194,6 @@ def randomSelect(x, D=0, output='.'):
 
     # Retain D indices
     idxs = idxs[0:D]
-
-    # Save output
-    np.savetxt('%s/random.idxs' % output, idxs, fmt='%d')
     return idxs
 
 def compute_SOAPs(al, d, idxs=None, batchSize=0, 
