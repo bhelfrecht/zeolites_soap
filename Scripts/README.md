@@ -1,4 +1,4 @@
-Generated automatically on 2019-09-18 17:00:18
+Generated automatically on 2019-10-11 08:37:02
 
 # Scripts
 
@@ -19,6 +19,8 @@ Script for computing SOAP vectors
 Module containing functions required
 for the data processing and analysis scripts  
 
+### SOAPTools.pyc (2019-09-14 13:05:26)  
+
 ### appendStructureProperty.py (2019-09-18 08:39:42)  
 Script for appending structure properties
 to the header line of an extended xyz file  
@@ -34,7 +36,7 @@ feature vectors (distances, angles, rings)
 ### centerData.py (2019-08-22 09:22:02)  
 Script for mean-centering the feature vectors  
 
-### correlations.ipynb (2019-09-18 08:44:00)  
+### correlations.ipynb (2019-10-07 08:16:13)  
 Jupyter notebook for analyzing KPCA-property correlations  
 
 ### hyperparameters.pkl (2019-09-18 09:27:54)  
