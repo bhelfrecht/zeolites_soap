@@ -1,4 +1,4 @@
-Generated automatically on 2019-10-11 08:37:02
+Generated automatically on 2019-10-25 08:24:28
 
 # Scripts
 
@@ -36,7 +36,7 @@ feature vectors (distances, angles, rings)
 ### centerData.py (2019-08-22 09:22:02)  
 Script for mean-centering the feature vectors  
 
-### correlations.ipynb (2019-10-07 08:16:13)  
+### correlations.ipynb (2019-10-25 07:30:35)  
 Jupyter notebook for analyzing KPCA-property correlations  
 
 ### hyperparameters.pkl (2019-09-18 09:27:54)  
